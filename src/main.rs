@@ -27,16 +27,22 @@ struct Cmd {
     #[clap(long)]
     details:bool,
 
-    /// Range
+    /// Row range
     #[clap(long,number_of_values=2)]
-    range:Option<Vec<usize>>
+    irange:Option<Vec<usize>>,
+
+    /// Column range
+    #[clap(long,number_of_values=2)]
+    jrange:Option<Vec<usize>>
 }
 
 pub struct MardiaTest {
     x_mu:Array1<f64>,
     x_cov:Array2<f64>,
     a:f64,
-    a_chi2_dof:f64,
+    a_mu:f64,
+    a_sigma:f64,
+    a_z:f64,
     b:f64
 }
 
@@ -66,12 +72,17 @@ impl MardiaTest {
 	let b = (m as f64 / (8*n*(n+2)) as f64).sqrt() *
 	    (k / m as f64 - (n*(n + 2)) as f64);
 
-	let a_chi2_dof = (n * (n + 1) * (n + 2)) as f64 / 6.0;
+	let a_mu = (n * (n + 1) * (n + 2)) as f64 / 6.0;
+	let a_sigma = (2.0*a_mu).sqrt();
+	let a_z = (a - a_mu) / a_sigma;
+
 	Ok(Self{
 	    x_mu,
 	    x_cov,
 	    a,
-	    a_chi2_dof,
+	    a_mu,
+	    a_sigma,
+	    a_z,
 	    b
 	})
     }
@@ -89,13 +100,24 @@ fn main()->Res<()> {
     println!("Dimensions:   {} by {}",m,n);
 
     let x =
-	match args.range {
+	match args.irange {
 	    None => x,
 	    Some(rv) => {
 		let i0 = rv[0];
 		let i1 = rv[1];
-		println!("Range:        {} to {}",i0,i1);
+		println!("Row range:    {} to {}",i0,i1);
 		x.slice(s![i0..i1,..]).to_owned()
+	    }
+	};
+
+    let x =
+	match args.jrange {
+	    None => x,
+	    Some(rv) => {
+		let j0 = rv[0];
+		let j1 = rv[1];
+		println!("Column range: {} to {}",j0,j1);
+		x.slice(s![..,j0..j1]).to_owned()
 	    }
 	};
 
@@ -116,10 +138,11 @@ fn main()->Res<()> {
     println!("Eff. dims.:   {} by {}",m,n);
 
     let mardia = MardiaTest::new(&x)?;
-    println!("A : got {:.1}, expected {:.1} plus or minus {:.3}",
+    println!("A : got {:.1}, expected {:.1} plus or minus {:.3}, Z-score {:.3}",
 	     mardia.a,
-	     mardia.a_chi2_dof,
-	     (2.0*mardia.a_chi2_dof).sqrt());
+	     mardia.a_mu,
+	     mardia.a_sigma,
+	     mardia.a_z);
     println!("B : got {:.3}, expected 0 plus or minus 1",
 	     mardia.b);
 
